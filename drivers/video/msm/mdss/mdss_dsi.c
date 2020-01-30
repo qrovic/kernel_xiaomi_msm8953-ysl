@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,7 +34,6 @@
 #include "mdss_debug.h"
 #include "mdss_dsi_phy.h"
 #include "mdss_dba_utils.h"
-#include "mdss_livedisplay.h"
 
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
@@ -44,12 +44,11 @@ static struct mdss_dsi_data *mdss_dsi_res;
 #define DSI_DISABLE_PC_LATENCY 100
 #define DSI_ENABLE_PC_LATENCY PM_QOS_DEFAULT_VALUE
 
-static struct pm_qos_request mdss_dsi_pm_qos_request;
-
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_TISSOT)
-int panel_suspend_reset_flag = 0;
-int panel_suspend_power_flag = 0;
+#if defined(CONFIG_YSL)
+int ID0_status, ID1_status;
 #endif
+
+static struct pm_qos_request mdss_dsi_pm_qos_request;
 
 static void mdss_dsi_pm_qos_add_request(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -278,12 +277,7 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev,
 	return rc;
 }
 
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-extern int ft8716_suspend;
-extern int  ft8716_gesture_func_on;
-int acc_vreg = 0;
-#endif
-int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
+static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -295,54 +289,65 @@ int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	}
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
-				panel_data);
+			panel_data);
 
-	ret = mdss_dsi_panel_reset(pdata, 0);
-	if (ret) {
-		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-		ret = 0;
-	}
+/*	if((ID0_status == 1) && (ID1_status == 0)){
+		ret = mdss_dsi_panel_reset(pdata, 0);
+		if (ret) {
+			pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+			ret = 0;
+		}
 
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("reset disable: pinctrl not enabled\n");
+		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+			pr_debug("reset disable: pinctrl not enabled\n");
 
-#ifdef CONFIG_MACH_XIAOMI_MIDO
-	if (2 == panel_suspend_reset_flag)
-		msleep(1); //dealy 2ms
-
-	if (4 == panel_suspend_reset_flag)
-		msleep(4); //delay 4ms
-#endif
-
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-	if ((panel_suspend_power_flag != 3) && acc_vreg) {
-#endif
 		ret = msm_dss_enable_vreg(
-		ctrl_pdata->panel_power_data.vreg_config,
-		ctrl_pdata->panel_power_data.num_vreg, 0);
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-		acc_vreg--;
-#endif
+			ctrl_pdata->panel_power_data.vreg_config,
+			ctrl_pdata->panel_power_data.num_vreg, 0);
 		if (ret)
 			pr_err("%s: failed to disable vregs for %s\n",
-			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-	} else {
-		if (!ft8716_gesture_func_on && ft8716_suspend && acc_vreg) {
+				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		}else if(((ID0_status == 0) && (ID1_status == 0)) || ((ID0_status == 0) && (ID1_status == 1))){	*/
+#if defined(CONFIG_YSL)
+			if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+				pr_debug("reset disable: pinctrl not enabled\n");
+
 			ret = msm_dss_enable_vreg(
-					ctrl_pdata->panel_power_data.vreg_config,
-					ctrl_pdata->panel_power_data.num_vreg, 0);
-			acc_vreg--;
+				ctrl_pdata->panel_power_data.vreg_config,
+				ctrl_pdata->panel_power_data.num_vreg, 0);
 			if (ret)
 				pr_err("%s: failed to disable vregs for %s\n",
-					 __func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-		}
-	}
+				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+			ret = mdss_dsi_panel_reset(pdata, 0);
+			if (ret) {
+				pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+				ret = 0;
+			}
 
+
+#else
+		ret = mdss_dsi_panel_reset(pdata, 0);
+		if (ret) {
+			pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+			ret = 0;
+		}
+
+		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+			pr_debug("reset disable: pinctrl not enabled\n");
+
+		ret = msm_dss_enable_vreg(
+			ctrl_pdata->panel_power_data.vreg_config,
+			ctrl_pdata->panel_power_data.num_vreg, 0);
+		if (ret)
+			pr_err("%s: failed to disable vregs for %s\n",
+				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
 #endif
 end:
 	return ret;
 }
+
+#define LCM_ID_GPIO0	66
+#define LCM_ID_GPIO1	20
 
 static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 {
@@ -353,27 +358,17 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
-
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-	if (!acc_vreg) {
-#endif
-		ret = msm_dss_enable_vreg(
+	ret = msm_dss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 1);
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-		acc_vreg++;
-#endif
-		if (ret) {
-			pr_err("%s: failed to enable vregs for %s\n",
-				__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
-			return ret;
-		}
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
+	if (ret) {
+		pr_err("%s: failed to enable vregs for %s\n",
+			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+		return ret;
 	}
-#endif
 
 	/*
 	 * If continuous splash screen feature is enabled, then we need to
@@ -391,6 +386,12 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
 	}
+
+#if defined(CONFIG_YSL)
+     ID0_status = gpio_get_value(LCM_ID_GPIO0);
+     ID1_status = gpio_get_value(LCM_ID_GPIO1);
+     printk("swb.%s:get lcd_detect id0=%d, id1=%d\n", __func__, ID0_status, ID1_status);
+#endif
 
 	return ret;
 }
@@ -454,7 +455,7 @@ static int mdss_dsi_panel_power_ulp(struct mdss_panel_data *pdata,
 int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 	int power_state)
 {
-	int ret;
+	int ret = 0;
 	struct mdss_panel_info *pinfo;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
 
@@ -1561,6 +1562,245 @@ end:
 	return ret;
 }
 
+bool first_read_reg = true;
+int read_x = 0, read_y = 0;
+extern bool gamma_resume;
+extern void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+		                           struct dsi_panel_cmds *pcmds, u32 flags);
+
+extern int mdss_dsi_read_reg(struct mdss_dsi_ctrl_pdata *ctrl, char cmd0, int *val0, int *val1);
+
+int mdss_dsi_set_gamma(struct mdss_dsi_ctrl_pdata *ctrl, int val2)
+{
+	int val0, val1;
+
+	pr_debug("guorui:%s\n", __func__);
+
+	if(!ctrl) {
+		pr_info("not available\n");
+		return -EINVAL;
+	}
+	if (!strncmp(ctrl->panel_data.panel_info.panel_name, "auo ili7807d", 12)) {
+		if(val2 == 1){
+			if (ctrl->gamma_on_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma_on_cmds, CMD_REQ_COMMIT);
+				printk("%s , gamma on, line %d \n", __func__, __LINE__);
+				return 0;
+			}
+		}else if(val2 == 2){
+			if (ctrl->gamma_off_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma_off_cmds, CMD_REQ_COMMIT);
+				printk("%s , gamma off, line %d \n", __func__, __LINE__);
+				return 0;
+			}
+		}else{
+			pr_err("%s:val2 not available\n", __func__);
+			return -EINVAL;
+		}
+	} else {
+		if(val2 == 1){
+
+		}else if(val2 == 2){
+			printk("guorui: %s , download default gamma, line %d \n", __func__, __LINE__);
+			if (ctrl->gamma0_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma0_cmds, CMD_REQ_COMMIT);
+				printk("guorui: %s , gamma0, line %d \n", __func__, __LINE__);
+				return 0;
+			}
+		}else{
+			pr_err("%s:val2 not available\n", __func__);
+			return -EINVAL;
+		}
+
+		if (first_read_reg) {
+			first_read_reg = false;
+			mdss_dsi_read_reg(ctrl, 0xa1, &val0, &val1);
+			read_x = val0;
+			read_y = val1;
+		} else {
+			val0 = read_x;
+			val1 = read_y;
+			pr_info("%s: read_x =0x%x: read_y =0x%x\n", __func__, val0, val1);
+		}
+
+
+		if(0 == val0 || 0 == val1){
+			printk("guorui: %s please check reg 0xa1 , val0:0x%x, val1:0x%x\n", __func__, val0, val1);
+			return 0;
+		}
+
+		if(gamma_resume){
+			pr_err("%s abandon gamma cmd from app set\n", __func__);
+			return 0;
+		}
+
+		if(val0 <= 0x8a && val0 >= 0x76){
+			if(val1 <= 0x85 && val1 >= 0x71){
+				printk("guorui: %s , no need for gamma balance, line %d \n", __func__, __LINE__);
+				return 0;
+			}else if(val1 <= 0x6b && val1 >= 0x62){
+				if (ctrl->gamma1_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma1_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma1, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x70 && val1 >= 0x6c){
+				if (ctrl->gamma2_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma2_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma2, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x8a && val1 >= 0x86){
+				if (ctrl->gamma3_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma3_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma3, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x94 && val1 >= 0x8b){
+				if (ctrl->gamma4_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma4_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma4, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}
+		}else if(val0 <= 0x70 && val0 >= 0x67){
+			if(val1 <= 0x6b && val1 >= 0x62){
+				if (ctrl->gamma9_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma9_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma9, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x70 && val1 >= 0x6c){
+				if (ctrl->gamma10_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma10_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma10, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x8a && val1 >= 0x86){
+				if (ctrl->gamma11_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma11_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma11, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x94 && val1 >= 0x8b){
+				if (ctrl->gamma12_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma12_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma12, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}
+		}else if(val0 <= 0x75 && val0 >= 0x71){
+			if(val1 <= 0x6b && val1 >= 0x62){
+				if (ctrl->gamma13_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma13_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma13, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x70 && val1 >= 0x6c){
+				if (ctrl->gamma14_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma14_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma14, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x8a && val1 >= 0x86){
+				if (ctrl->gamma15_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma15_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma15, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x94 && val1 >= 0x8b){
+				if (ctrl->gamma16_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma16_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma16, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}
+		}else if(val0 <= 0x8f && val0 >= 0x8b){
+			if(val1 <= 0x6b && val1 >= 0x62){
+				if (ctrl->gamma17_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma17_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma17, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x70 && val1 >= 0x6c){
+				if (ctrl->gamma18_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma18_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma18, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x8a && val1 >= 0x86){
+				if (ctrl->gamma19_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma19_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma19, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x94 && val1 >= 0x8b){
+				if (ctrl->gamma20_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma20_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma20, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}
+		}else if(val0 <= 0x99 && val0 >= 0x90){
+			if(val1 <= 0x6b && val1 >= 0x62){
+				if (ctrl->gamma21_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma21_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma21, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x70 && val1 >= 0x6c){
+				if (ctrl->gamma22_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma22_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma22, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x8a && val1 >= 0x86){
+				if (ctrl->gamma23_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma23_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma23, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val1 <= 0x94 && val1 >= 0x8b){
+				if (ctrl->gamma24_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma24_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma24, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}
+		}
+
+		if(val1 <= 0x85 && val1 >=0x71){
+			if(val0 <= 0x70 && val0 >= 0x67){
+				if (ctrl->gamma5_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma5_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma5, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val0 <= 0x75 && val0 >= 0x71){
+				if (ctrl->gamma6_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma6_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma6, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val0 <= 0x8f && val0 >= 0x8b){
+				if (ctrl->gamma7_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma7_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma7, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}else if(val0 <= 0x99 && val0 >= 0x90){
+				if (ctrl->gamma8_cmds.cmd_cnt){
+					mdss_dsi_panel_cmds_send(ctrl, &ctrl->gamma8_cmds, CMD_REQ_COMMIT);
+					printk("guorui: %s , gamma8, line %d \n", __func__, __LINE__);
+					return 0;
+				}
+			}
+		}
+	}
+	printk("guorui: %s no gamma match! please check reg 0xa1 !\n", __func__);
+	return 0;
+}
+
 static int mdss_dsi_pinctrl_set_state(
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	bool active)
@@ -1624,6 +1864,10 @@ static int mdss_dsi_pinctrl_init(struct platform_device *pdev)
 	return 0;
 }
 
+extern int  set_gamma;
+extern bool first_gamma_state;
+extern int ce_state;
+
 static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
@@ -1676,6 +1920,23 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 			ATRACE_END("dsi_panel_on");
 		}
 	}
+
+	/*add for white point check -start-*/
+	if (ce_state == 1) {
+		if (mdss_dsi_set_gamma(ctrl_pdata, set_gamma)) {
+			pr_err("%s first set gamma fail ! \n", __func__);
+		} else {
+			first_gamma_state = true;
+		}
+	} else if (ce_state == 2) {
+		if (mdss_dsi_set_gamma(ctrl_pdata, 2)) {
+			pr_err("%s first set gamma fail ! \n", __func__);
+		} else {
+			first_gamma_state = true;
+		}
+	}
+	/*add for white point check -end-*/
+
 
 	if ((pdata->panel_info.type == MIPI_CMD_PANEL) &&
 		mipi->vsync_enable && mipi->hw_vsync_mode) {
@@ -1757,7 +2018,8 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 			ATRACE_BEGIN("dsi_panel_off");
 			ret = ctrl_pdata->off(pdata);
 			if (ret) {
-				pr_err("%s: Panel OFF failed\n", __func__);
+				pr_err("%s: Panel OFF failed\n",
+					__func__);
 				goto error;
 			}
 			ATRACE_END("dsi_panel_off");
@@ -1811,81 +2073,6 @@ static irqreturn_t test_hw_vsync_handler(int irq, void *data)
 	if (pdata->next)
 		complete_all(&pdata->next->te_done);
 	return IRQ_HANDLED;
-}
-
-static int mdss_dsi_disp_wake_thread(void *data)
-{
-	struct mdss_panel_data *pdata = data;
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata =
-		container_of(pdata, typeof(*ctrl_pdata), panel_data);
-	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
-
-	sched_setscheduler(current, SCHED_FIFO, &param);
-
-	wait_event(ctrl_pdata->wake_waitq,
-		atomic_read(&ctrl_pdata->needs_wake));
-
-	/* MDSS_EVENT_LINK_READY */
-	if (ctrl_pdata->refresh_clk_rate)
-		mdss_dsi_clk_refresh(pdata, ctrl_pdata->update_phy_timing);
-	mdss_dsi_on(pdata);
-
-	/* MDSS_EVENT_UNBLANK */
-	mdss_dsi_unblank(pdata);
-
-	/* MDSS_EVENT_PANEL_ON */
-	ctrl_pdata->ctrl_state |= CTRL_STATE_MDP_ACTIVE;
-	pdata->panel_info.esd_rdy = true;
-
-	atomic_set(&ctrl_pdata->needs_wake, 0);
-	complete_all(&ctrl_pdata->wake_comp);
-
-	return 0;
-}
-
-static void mdss_dsi_start_wake_thread(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	if (ctrl_pdata->wake_thread)
-		return;
-
-	ctrl_pdata->wake_thread = kthread_run(mdss_dsi_disp_wake_thread,
-						&ctrl_pdata->panel_data,
-						"mdss_disp_wake");
-	if (IS_ERR(ctrl_pdata->wake_thread)) {
-		pr_err("%s: Failed to start disp-wake thread, rc=%ld\n",
-				__func__, PTR_ERR(ctrl_pdata->wake_thread));
-		ctrl_pdata->wake_thread = NULL;
-	}
-}
-
-static void mdss_dsi_display_wake(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	if (atomic_read(&ctrl_pdata->disp_is_on))
-		return;
- 	atomic_set(&ctrl_pdata->disp_is_on, 1);
-	reinit_completion(&ctrl_pdata->wake_comp);
- 	/* Make sure the thread is started since it's needed right now */
-	mdss_dsi_start_wake_thread(ctrl_pdata);
-	ctrl_pdata->wake_thread = NULL;
- 	atomic_set(&ctrl_pdata->needs_wake, 1);
-	wake_up(&ctrl_pdata->wake_waitq);
-}
-
-static int mdss_dsi_fb_unblank_cb(struct notifier_block *nb,
-	unsigned long action, void *data)
-{
-	struct mdss_dsi_ctrl_pdata *ctrl_pdata =
-		container_of(nb, typeof(*ctrl_pdata), wake_notif);
-	struct fb_event *evdata = data;
-	int *blank = evdata->data;
- 	/* Parse framebuffer blank events as soon as they occur */
-	if (action != FB_EARLY_EVENT_BLANK)
-		return NOTIFY_OK;
- 	if (*blank == FB_BLANK_UNBLANK)
-		mdss_dsi_display_wake(ctrl_pdata);
-	else
-		mdss_dsi_start_wake_thread(ctrl_pdata);
- 	return NOTIFY_OK;
 }
 
 int mdss_dsi_cont_splash_on(struct mdss_panel_data *pdata)
@@ -2759,11 +2946,26 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		ctrl_pdata->refresh_clk_rate = true;
 		break;
 	case MDSS_EVENT_LINK_READY:
-		/* The unblank notifier handles waking for unblank events */
-		mdss_dsi_display_wake(ctrl_pdata);
+		if (ctrl_pdata->refresh_clk_rate)
+			rc = mdss_dsi_clk_refresh(pdata,
+				ctrl_pdata->update_phy_timing);
+
+		rc = mdss_dsi_on(pdata);
+		mdss_dsi_op_mode_config(pdata->panel_info.mipi.mode,
+							pdata);
+		break;
+	case MDSS_EVENT_UNBLANK:
+		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE)
+			rc = mdss_dsi_unblank(pdata);
 		break;
 	case MDSS_EVENT_POST_PANEL_ON:
 		rc = mdss_dsi_post_panel_on(pdata);
+		break;
+	case MDSS_EVENT_PANEL_ON:
+		ctrl_pdata->ctrl_state |= CTRL_STATE_MDP_ACTIVE;
+		if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
+			rc = mdss_dsi_unblank(pdata);
+		pdata->panel_info.esd_rdy = true;
 		break;
 	case MDSS_EVENT_BLANK:
 		power_state = (int) (unsigned long) arg;
@@ -2777,7 +2979,6 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata, power_state);
 		rc = mdss_dsi_off(pdata, power_state);
-		atomic_set(&ctrl_pdata->disp_is_on, 0);
 		break;
 	case MDSS_EVENT_CONT_SPLASH_FINISH:
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
@@ -2867,9 +3068,6 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				queue_delayed_work(ctrl_pdata->workq,
 					&ctrl_pdata->dba_work, HZ);
 		}
-		break;
-	case MDSS_EVENT_UPDATE_LIVEDISPLAY:
-		rc = mdss_livedisplay_update(ctrl_pdata, (int)(unsigned long) arg);
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
@@ -3003,20 +3201,6 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 			__func__, panel_cfg, panel_name);
 		if (!strcmp(panel_name, NONE_PANEL))
 			goto exit;
-
-#if (defined CONFIG_MACH_XIAOMI_MIDO) || (defined CONFIG_MACH_XIAOMI_TISSOT)
-		if (!strcmp(panel_name, "qcom,mdss_dsi_td4310_fhd_video")) {
-			panel_suspend_reset_flag = 1;
-			panel_suspend_power_flag = 1;
-		} else if (!strcmp(panel_name, "qcom,mdss_dsi_otm1911_fhd_video")) {
-			panel_suspend_reset_flag = 2;
-			panel_suspend_power_flag = 2;
-		} else if (!strcmp(panel_name, "qcom,mdss_dsi_ft8716_fhd_video")) {
-			panel_suspend_reset_flag = 3;
-			panel_suspend_power_flag = 3;
-		} else if (!strcmp(panel_name, "qcom,mdss_dsi_ili9885_boe_fhd_video"))
-			panel_suspend_reset_flag = 4;
-#endif
 
 		mdss_node = of_parse_phandle(pdev->dev.of_node,
 			"qcom,mdss-mdp", 0);
@@ -3292,10 +3476,6 @@ end:
 	return rc;
 }
 
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-struct mdss_panel_data *panel_data;
-#endif
-
 static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -3307,6 +3487,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	struct mdss_util_intf *util;
 	static int te_irq_registered;
 	struct mdss_panel_data *pdata;
+	struct mdss_panel_cfg *pan_cfg = NULL;
 
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("%s: pdev not found for DSI controller\n", __func__);
@@ -3336,6 +3517,14 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	util = mdss_get_util_intf();
 	if (util == NULL) {
 		pr_err("Failed to get mdss utility functions\n");
+		return -ENODEV;
+	}
+
+	pan_cfg = util->panel_intf_type(MDSS_PANEL_INTF_SPI);
+	if (IS_ERR(pan_cfg)) {
+		return PTR_ERR(pan_cfg);
+	} else if (pan_cfg) {
+		pr_debug("%s: SPI is primary\n", __func__);
 		return -ENODEV;
 	}
 
@@ -3388,13 +3577,6 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	} else {
 		ctrl_pdata->bklt_ctrl = UNKNOWN_CTRL;
 	}
-
-#ifdef CONFIG_MACH_XIAOMI_TISSOT
-	panel_data = &ctrl_pdata->panel_data;
-#endif
-
-	pm_qos_add_request(&ctrl_pdata->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
-PM_QOS_DEFAULT_VALUE);
 
 	rc = dsi_panel_device_register(pdev, dsi_pan_node, ctrl_pdata);
 	if (rc) {
@@ -3482,10 +3664,6 @@ PM_QOS_DEFAULT_VALUE);
 		ctrl_pdata->shared_data->dsi0_active = true;
 	else
 		ctrl_pdata->shared_data->dsi1_active = true;
-
-	ctrl_pdata->wake_notif.notifier_call = mdss_dsi_fb_unblank_cb;
-	ctrl_pdata->wake_notif.priority = INT_MAX - 1;
-	fb_register_client(&ctrl_pdata->wake_notif);
 
 	return 0;
 
@@ -3899,6 +4077,12 @@ static int mdss_dsi_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	if (util->display_disabled) {
+		pr_info("%s: Display is disabled, not progressing with dsi probe\n",
+			__func__);
+		return -ENOTSUPP;
+	}
+
 	if (!pdev || !pdev->dev.of_node) {
 		pr_err("%s: DSI driver only supports device tree probe\n",
 			__func__);
@@ -3967,7 +4151,6 @@ static int mdss_dsi_ctrl_remove(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	fb_unregister_client(&ctrl_pdata->wake_notif);
 	mdss_dsi_pm_qos_remove_request(ctrl_pdata->shared_data);
 
 	if (msm_dss_config_vreg(&pdev->dev,
@@ -4205,50 +4388,6 @@ static int mdss_dsi_parse_ctrl_params(struct platform_device *ctrl_pdev,
 
 }
 
-#ifdef CONFIG_MACH_XIAOMI_MIDO
-u32 te_count;
-static irqreturn_t te_interrupt(int irq, void *data)
-{
-	disable_irq_nosync(irq);
-
-	te_count++;
-
-	enable_irq(irq);
-	return IRQ_HANDLED;
-}
-
-int init_te_irq(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
-{
-	int rc = -1;
-	int irq;
-	if (gpio_is_valid(ctrl_pdata->disp_te_gpio)) {
-		rc = gpio_request(ctrl_pdata->disp_te_gpio, "te-gpio");
-		if (rc < 0) {
-			pr_err("%s: gpio_request fail rc=%d\n", __func__, rc);
-			return rc ;
-		}
-		rc = gpio_direction_input(ctrl_pdata->disp_te_gpio);
-		if (rc < 0) {
-			pr_err("%s: gpio_direction_input fail rc=%d\n", __func__, rc);
-			return rc ;
-		}
-		irq = gpio_to_irq(ctrl_pdata->disp_te_gpio);
-		pr_err("%s:liujia  irq = %d\n", __func__, irq);
-		rc = request_threaded_irq(irq, te_interrupt, NULL,
-			IRQF_TRIGGER_RISING|IRQF_ONESHOT,
-			"te-irq", ctrl_pdata);
-		if (rc < 0) {
-			pr_err("%s: request_irq fail rc=%d\n", __func__, rc);
-			return rc ;
-		}
-	} else {
-		 pr_err("%s:liujia irq gpio not provided\n", __func__);
-		 return rc ;
-	}
-		return 0;
-}
-#endif
-
 static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
@@ -4267,6 +4406,7 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 		if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
 			pr_debug("%s:%d, Disp_en gpio not specified\n",
 					__func__, __LINE__);
+		pdata->panel_en_gpio = ctrl_pdata->disp_en_gpio;
 	}
 
 	ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
@@ -4281,6 +4421,14 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 		"qcom,platform-bklight-en-gpio", 0);
 	if (!gpio_is_valid(ctrl_pdata->bklt_en_gpio))
 		pr_info("%s: bklt_en gpio not specified\n", __func__);
+
+	ctrl_pdata->ocp2131_enp_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node, "qcom,ocp2131-enp-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->ocp2131_enp_gpio))
+		pr_info("%s: ocp2131_enp_gpio not specified\n", __func__);
+
+	ctrl_pdata->ocp2131_enn_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node, "qcom,ocp2131-enn-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->ocp2131_enn_gpio))
+		pr_info("%s: ocp2131_enn_gpio not specified\n", __func__);
 
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "qcom,platform-reset-gpio", 0);
@@ -4413,12 +4561,6 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 		ctrl_pdata->check_status = mdss_dsi_reg_status_check;
 	else if (ctrl_pdata->status_mode == ESD_BTA)
 		ctrl_pdata->check_status = mdss_dsi_bta_status_check;
-#ifdef CONFIG_MACH_XIAOMI_MIDO
-	else if (ctrl_pdata->status_mode == ESD_TE_NT35596) {
-		ctrl_pdata->check_status = mdss_dsi_TE_NT35596_check;
-		init_te_irq(ctrl_pdata);
-	}
-#endif
 
 	if (ctrl_pdata->status_mode == ESD_MAX) {
 		pr_err("%s: Using default BTA for ESD check\n", __func__);
@@ -4475,9 +4617,6 @@ int dsi_panel_device_register(struct platform_device *ctrl_pdev,
 
 	pr_info("%s: Continuous splash %s\n", __func__,
 		pinfo->cont_splash_enabled ? "enabled" : "disabled");
-
-	init_completion(&ctrl_pdata->wake_comp);
-	init_waitqueue_head(&ctrl_pdata->wake_waitq);
 
 	rc = mdss_register_panel(ctrl_pdev, &(ctrl_pdata->panel_data));
 	if (rc) {
