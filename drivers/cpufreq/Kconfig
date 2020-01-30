@@ -200,13 +200,6 @@ config CPU_FREQ_DEFAULT_GOV_CYAN
 	help
 	  'cyan' - an interactive based optimized governor!
 
-config CPU_FREQ_DEFAULT_GOV_DARKNESS
-	bool "darkness"
-	select CPU_FREQ_GOV_DARKNESS
-	help
-	  It's based on nightmare but more simple and fast, basic configs but very complex structure.
-	  It is an updated nightmare gov and improved stability, so far it is quite stable in tests.
-
 config CPU_FREQ_DEFAULT_GOV_INTERACTIVE
 	bool "interactive"
 	select CPU_FREQ_GOV_INTERACTIVE
@@ -466,11 +459,6 @@ config CPU_FREQ_GOV_CYAN
 	default y
 	help
 	  'cyan' - an interactive based optimized governor!
-
-config CPU_FREQ_GOV_DARKNESS
-	tristate "'darkness' cpufreq governor"
-	depends on CPU_FREQ
-	select CPU_FREQ_GOV_COMMON
 
 config CPU_FREQ_GOV_SCHED
 	bool "'sched' cpufreq governor"
