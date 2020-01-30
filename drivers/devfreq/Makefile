@@ -8,6 +8,9 @@ obj-$(CONFIG_DEVFREQ_GOV_POWERSAVE)	+= governor_powersave.o
 obj-$(CONFIG_DEVFREQ_GOV_USERSPACE)	+= governor_userspace.o
 obj-$(CONFIG_DEVFREQ_GOV_CPUFREQ)	+= governor_cpufreq.o
 obj-$(CONFIG_DEVFREQ_GOV_MSM_ADRENO_TZ)	+= governor_msm_adreno_tz.o
+obj-$(CONFIG_DEVFREQ_GOV_MSM_ADRENO_PLUS)	+= governor_msm_adreno_plus.o
+obj-$(CONFIG_DEVFREQ_GOV_MSM_ADRENO_BALANCED)	+= governor_msm_adreno_balanced.o
+obj-$(CONFIG_DEVFREQ_GOV_MSM_ADRENO_GUARDIAN)	+= governor_msm_adreno_guardian.o
 obj-$(CONFIG_MSM_BIMC_BWMON)		+= bimc-bwmon.o
 obj-$(CONFIG_ARMBW_HWMON)		+= armbw-pm.o
 obj-$(CONFIG_ARM_MEMLAT_MON)		+= arm-memlat-mon.o
@@ -19,6 +22,7 @@ obj-$(CONFIG_DEVFREQ_GOV_MSM_GPUBW_MON)        += governor_gpubw_mon.o
 obj-$(CONFIG_DEVFREQ_GOV_MSM_GPUBW_MON)	+= governor_bw_vbif.o
 obj-$(CONFIG_DEVFREQ_GOV_SPDM_HYP) 	+= governor_spdm_bw_hyp.o
 obj-$(CONFIG_DEVFREQ_GOV_MEMLAT)	+= governor_memlat.o
+obj-$(CONFIG_ADRENO_IDLER)		+= adreno_idler.o
 
 # DEVFREQ Drivers
 obj-$(CONFIG_ARM_EXYNOS4_BUS_DEVFREQ)	+= exynos/
@@ -26,3 +30,9 @@ obj-$(CONFIG_ARM_EXYNOS5_BUS_DEVFREQ)	+= exynos/
 obj-$(CONFIG_MSM_DEVFREQ_DEVBW)		+= devfreq_devbw.o
 obj-$(CONFIG_DEVFREQ_SIMPLE_DEV)	+= devfreq_simple_dev.o
 obj-$(CONFIG_DEVFREQ_SPDM) 		+= devfreq_spdm.o devfreq_spdm_debugfs.o
+
+# DEVFREQ Event Drivers
+obj-$(CONFIG_PM_DEVFREQ_EVENT)		+= event/
+
+# DEVFREQ Boost
+obj-$(CONFIG_DEVFREQ_BOOST)		+= devfreq_boost.o
